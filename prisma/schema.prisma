@@ -1,12 +1,6 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
+// ---------- GENERATOR & DATASOURCE ----------
 generator client {
   provider = "prisma-client-js"
-  
 }
 
 datasource db {
@@ -14,52 +8,72 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
-model Organization{
-  organization_id Int @id @default(autoincrement())
-  name String
-  createdby String
-  createdAT DateTime
-  createdBy       Users     @relation("OrganizationCreatedBy", fields: [createdby], references: [user_id])
-
-  user Users[]
-  project Project[]
-   roles    Role[]
-}
-
-enum Status{
+// ---------- ENUMS ----------
+enum Status {
   active
   inactive
 }
-model Users{
-  user_id String @id @default(uuid())
-  name String
-  email String
-  password String
-  status Status
-  organization_id Int
-  organization Organization @relation(fields: [organization_id], references: [organization_id])
-  created_by String?
-  created_at DateTime
 
-  createdBy     Users?       @relation("UserCreatedBy", fields: [created_by], references: [user_id])
-  createdUsers  Users[]      @relation("UserCreatedBy")
-  projectsCreated Project[] @relation("ProjectCreatedBy")
-  projectsUpdated Project[] @relation("ProjectUpdatedBy")
-  organizations Organization[] @relation("OrganizationCreatedBy")
-  rolesCreated    Role[]    @relation("RoleCreatedBy")
-  userProjectRole ProjectUserRole[]
-
-  budget Budget[]
-
-}
-
-enum ProjectStatus{
+enum ProjectStatus {
   todo
-
+  in_progress
+  completed
+  on_hold
 }
 
- model Project{
+// ---------- MODELS ----------
+model Organization {
+  organization_id Int       @id @default(autoincrement())
+  name            String
+  status          Status
+  created_by      String
+  created_at      DateTime  @default(now())
+
+  createdBy       Users     @relation("OrganizationCreatedBy", fields: [created_by], references: [user_id])
+
+  users           Users[]
+  projects        Project[]
+  developerRoles  DeveloperRole[]
+}
+
+model Users {
+  user_id         String   @id @default(uuid())
+  name            String
+  email           String   @unique
+  password        String
+  status          Status   @default(active)
+  organization_id Int
+  created_by      String?
+  created_at      DateTime @default(now())
+  userRole_id     Int
+
+  // Relations
+  organization    Organization @relation(fields: [organization_id], references: [organization_id])
+  userRole        UserRole     @relation(fields: [userRole_id], references: [userRole_id])
+
+  createdBy       Users?       @relation("UserCreatedBy", fields: [created_by], references: [user_id])
+  createdUsers    Users[]      @relation("UserCreatedBy")
+
+  projectsCreated Project[]    @relation("ProjectCreatedBy")
+  projectsUpdated Project[]    @relation("ProjectUpdatedBy")
+  organizations   Organization[] @relation("OrganizationCreatedBy")
+
+  developerRolesCreated DeveloperRole[] @relation("RoleCreatedBy")
+  projectAssignments    ProjectUserRole[]
+  budgets               Budget[]
+}
+
+model UserRole {
+  userRole_id Int      @id @default(autoincrement())
+  roleName    String   // Company Admin, Finance, Viewer, Developer
+  created_at  DateTime @default(now())
+
+  users       Users[]
+  projectRoles ProjectUserRole[]
+  permissions Permission[]
+}
+
+model Project {
   project_id      Int      @id @default(autoincrement())
   name            String
   description     String
@@ -73,44 +87,43 @@ enum ProjectStatus{
   updated_by      String
   updated_at      DateTime?
 
-  
-  organization Organization @relation(fields: [organization_id], references: [organization_id])
-  createdBy    Users         @relation("ProjectCreatedBy", fields: [created_by], references: [user_id])
-  updatedBy    Users        @relation("ProjectUpdatedBy", fields: [updated_by], references: [user_id])
+  // Relations
+  organization    Organization @relation(fields: [organization_id], references: [organization_id])
+  createdBy       Users        @relation("ProjectCreatedBy", fields: [created_by], references: [user_id])
+  updatedBy       Users        @relation("ProjectUpdatedBy", fields: [updated_by], references: [user_id])
 
-  projectUserRole ProjectUserRole[]
-
-  budget Budget[]
- }
-
-
-model Role {
-  role_id         Int      @id @default(autoincrement())
-  role_name       String
-  organization_id Int
-  created_by      String
-  created_at      DateTime @default(now())
-
-  organization Organization @relation(fields: [organization_id], references: [organization_id])
-  createdBy     Users        @relation("RoleCreatedBy", fields: [created_by], references: [user_id])
-
-  projectUserRole ProjectUserRole[]
-
-  permission Permission[]
+  projectAssignments ProjectUserRole[]
+  budgets            Budget[]
 }
 
+model DeveloperRole {
+  developerRole_id Int      @id @default(autoincrement())
+  role_name        String   // Project Manager, Frontend, Backend, AI/ML, Blockchain
+  organization_id  Int
+  created_by       String
+  created_at       DateTime @default(now())
+
+  // Relations
+  organization Organization @relation(fields: [organization_id], references: [organization_id])
+  createdBy    Users        @relation("RoleCreatedBy", fields: [created_by], references: [user_id])
+
+  projectRoles ProjectUserRole[]
+  permissions  Permission[]
+}
 
 model ProjectUserRole {
-  id         Int      @id @default(autoincrement())
-  project_id Int
-  user_id    String
-  role_id    Int
-  assigned_at DateTime @default(now())
+  id              Int @id @default(autoincrement())
+  project_id      Int
+  user_id         String
+  userRole_id     Int?
+  developerRole_id Int?
+  assigned_at     DateTime @default(now())
 
-  user Users @relation(fields: [user_id], references: [user_id])
-  project Project @relation(fields: [project_id], references: [project_id])
- role    Role    @relation(fields: [role_id], references: [role_id])
-
+  // Relations
+  project   Project       @relation(fields: [project_id], references: [project_id])
+  user      Users         @relation(fields: [user_id], references: [user_id])
+  userRole  UserRole?     @relation(fields: [userRole_id], references: [userRole_id])
+  devRole   DeveloperRole? @relation(fields: [developerRole_id], references: [developerRole_id])
 }
 
 model Budget {
@@ -123,15 +136,19 @@ model Budget {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
+  // Relations
   project   Project @relation(fields: [project_id], references: [project_id])
-  updatedBy Users    @relation(fields: [updated_by], references: [user_id])
+  updatedBy Users   @relation(fields: [updated_by], references: [user_id])
 }
 
 model Permission {
-  permission_id  Int      @id @default(autoincrement())
-  role_id        Int
+  permission_id   Int      @id @default(autoincrement())
   permission_name String
-  allowed        Boolean
+  allowed         Boolean
+  userRole_id     Int?
+  developerRole_id Int?
 
-  role Role @relation(fields: [role_id], references: [role_id])
+  // Relations
+  userRole UserRole?     @relation(fields: [userRole_id], references: [userRole_id])
+  devRole  DeveloperRole? @relation(fields: [developerRole_id], references: [developerRole_id])
 }
